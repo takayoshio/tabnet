@@ -346,6 +346,7 @@ class TabNetPretraining(torch.nn.Module):
 
         self.masker = RandomObfuscator(self.pretraining_ratio,
                                        group_matrix=self.embedder.embedding_group_matrix)
+        self.masker2 = ColumnObfuscator(self.column)
         self.encoder = TabNetEncoder(
             input_dim=self.post_embed_dim,
             output_dim=self.post_embed_dim,
@@ -387,9 +388,19 @@ class TabNetPretraining(torch.nn.Module):
             res = self.decoder(steps_out)
             return res, embedded_x, obfuscated_vars
         else:
-            steps_out, _ = self.encoder(embedded_x)
-            res = self.decoder(steps_out)
-            return res, embedded_x, torch.ones(embedded_x.shape).to(x.device)
+            if self.pred2:  # self.pred2 is a boolean attribute to decide the use of masker2
+                masked_x, obfuscated_groups, obfuscated_vars = self.masker2(embedded_x)
+                # Assume that similar to masker, masker2 also provides these outputs
+                prior = 1 - obfuscated_groups
+                steps_out, _ = self.encoder(masked_x, prior=prior)
+                res = self.decoder(steps_out)
+                return res, embedded_x, obfuscated_vars
+            else:
+                steps_out, _ = self.encoder(embedded_x)
+                res = self.decoder(steps_out)
+                return res, embedded_x, torch.ones(embedded_x.shape).to(x.device)
+
+    
 
     def forward_masks(self, x):
         embedded_x = self.embedder(x)
